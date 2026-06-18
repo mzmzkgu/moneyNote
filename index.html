@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📒 내 가계부</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.10/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ══ 다크 테마 (기본) ══ */
+    :root {
+      --bg:         #0d1b14;
+      --surface:    #152210;
+      --card:       #1a2e1a;
+      --card2:      #1f3520;
+      --border:     #2a4230;
+      --accent:     #4caf7d;
+      --accent2:    #2e7d52;
+      --accent-dim: rgba(76,175,125,0.15);
+      --text:       #e8f0eb;
+      --text-muted: #7aab8a;
+      --text-dim:   #4a6a54;
+      --red:        #e05c5c;
+      --red-dim:    rgba(224,92,92,0.15);
+      --yellow:     #e8c84a;
+      --blue:       #5ca8e0;
+      --radius:     12px;
+      --radius-sm:  8px;
+      --shadow:     0 4px 20px rgba(0,0,0,0.4);
+      --fab-text:   #0d1b14;
+    }
+
+    /* ══ 라이트 테마 ══ */
+    [data-theme="light"] {
+      --bg:         #f0f5f1;
+      --surface:    #ffffff;
+      --card:       #ffffff;
+      --card2:      #f5faf6;
+      --border:     #d0e0d5;
+      --accent:     #2e7d52;
+      --accent2:    #1a5c38;
+      --accent-dim: rgba(46,125,82,0.10);
+      --text:       #1a2e1a;
+      --text-muted: #4a7a5a;
+      --text-dim:   #8aaa94;
+      --red:        #c0392b;
+      --red-dim:    rgba(192,57,43,0.10);
+      --yellow:     #b8860b;
+      --blue:       #2666a8;
+      --shadow:     0 2px 12px rgba(0,0,0,0.08);
+      --fab-text:   #ffffff;
+    }
+
+    html { font-size: 16px; }
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      overscroll-behavior: none;
+      transition: background 0.25s, color 0.25s;
+    }
+
+    #root { display: flex; flex-direction: column; min-height: 100dvh; max-width: 480px; margin: 0 auto; position: relative; }
+
+    /* ── 헤더 ── */
+    .app-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      gap: 8px;
+      box-shadow: var(--shadow);
+    }
+    .app-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); letter-spacing: -0.3px; flex-shrink: 0; }
+    .header-actions { display: flex; align-items: center; gap: 4px; }
+    .header-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 1rem; padding: 5px 7px; border-radius: var(--radius-sm);
+      transition: color 0.2s, background 0.2s; line-height: 1;
+    }
+    .header-btn:hover { color: var(--text); background: var(--accent-dim); }
+    /* 폰트 크기 버튼 */
+    .font-btn {
+      background: var(--card2); border: 1px solid var(--border);
+      color: var(--text-muted); cursor: pointer; border-radius: var(--radius-sm);
+      padding: 3px 7px; font-family: inherit; font-weight: 700;
+      transition: all 0.15s; line-height: 1.4;
+    }
+    .font-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .font-size-label { font-size: 0.68rem; color: var(--text-dim); padding: 0 2px; }
+
+    /* ── 탭 ── */
+    .tabs {
+      display: flex; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex: 1; min-width: 70px; padding: 10px 4px;
+      background: none; border: none; cursor: pointer;
+      color: var(--text-dim); font-size: 0.78rem; font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── 콘텐츠 ── */
+    .content { flex: 1; padding: 16px; overflow-y: auto; padding-bottom: 100px; }
+
+    /* ── 월 네비게이터 ── */
+    .month-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--card); border-radius: var(--radius); padding: 10px 14px;
+      margin-bottom: 14px; border: 1px solid var(--border);
+    }
+    .month-nav-btn {
+      background: none; border: none; color: var(--text-muted); cursor: pointer;
+      font-size: 1.2rem; padding: 4px 10px; border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+    .month-nav-btn:hover { background: var(--accent-dim); color: var(--accent); }
+    .month-label { font-size: 0.95rem; font-weight: 600; }
+
+    /* ── 요약 카드 ── */
+    .summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .summary-card {
+      background: var(--card); border-radius: var(--radius); padding: 14px;
+      border: 1px solid var(--border);
+    }
+    .summary-card.full { grid-column: 1 / -1; }
+    .summary-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 4px; }
+    .summary-amount {
+      font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+    .summary-amount.red { color: var(--red); }
+    .summary-amount.green { color: var(--accent); }
+    .summary-amount.yellow { color: var(--yellow); }
+
+    /* ── FAB ── */
+    .fab {
+      position: fixed; bottom: 24px; right: calc(50% - 240px + 16px);
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--accent); color: var(--fab-text);
+      border: none; cursor: pointer; font-size: 1.5rem;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 16px rgba(76,175,125,0.45);
+      transition: transform 0.15s, box-shadow 0.15s;
+      z-index: 200;
+    }
+    .fab:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(76,175,125,0.6); }
+    .fab:active { transform: scale(0.95); }
+
+    /* ── 모달 ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+      display: flex; align-items: flex-end; justify-content: center;
+      z-index: 300; animation: fadeIn 0.15s ease;
+    }
+    .modal {
+      background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
+      width: 100%; max-width: 480px; padding: 20px 16px 36px;
+      border-top: 1px solid var(--border);
+      animation: slideUp 0.2s ease;
+      max-height: 90dvh; overflow-y: auto;
+    }
+    .modal-title {
+      font-size: 1rem; font-weight: 700; margin-bottom: 16px;
+      color: var(--accent); display: flex; align-items: center; gap: 6px;
+    }
+    .modal-close {
+      margin-left: auto; background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 1.1rem;
+    }
+
+    /* ── 폼 ── */
+    .form-row { margin-bottom: 12px; }
+    .form-label { font-size: 0.73rem; color: var(--text-muted); margin-bottom: 5px; display: block; }
+    .form-input, .form-select {
+      width: 100%; background: var(--card2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 12px;
+      color: var(--text); font-size: 0.9rem; font-family: inherit;
+      transition: border-color 0.2s;
+      appearance: none; -webkit-appearance: none;
+    }
+    .form-input:focus, .form-select:focus { outline: none; border-color: var(--accent); }
+    .form-input::placeholder { color: var(--text-dim); }
+    .form-input.amount { font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+    .btn {
+      flex: 1; padding: 12px; border-radius: var(--radius-sm);
+      border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600;
+      font-family: inherit; transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: var(--fab-text); }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-ghost { background: var(--card2); color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); }
+    .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(224,92,92,0.3); }
+
+    /* ── 분류 뱃지 ── */
+    .category-badge {
+      font-size: 0.68rem; color: var(--blue); background: rgba(92,168,224,0.15);
+      padding: 2px 7px; border-radius: 99px; border: 1px solid rgba(92,168,224,0.25);
+    }
+    [data-theme="light"] .category-badge { color: #1a66b8; background: rgba(26,102,184,0.08); border-color: rgba(26,102,184,0.2); }
+
+    /* ── 지출 리스트 아이템 ── */
+    .expense-item {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 14px;
+      margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px;
+      transition: border-color 0.2s; cursor: pointer;
+    }
+    .expense-item:hover { border-color: var(--accent2); }
+    .expense-item.settled { opacity: 0.5; }
+    .expense-item-check {
+      width: 20px; height: 20px; flex-shrink: 0;
+      border-radius: 50%; border: 2px solid var(--border);
+      background: none; cursor: pointer; margin-top: 2px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .expense-item-check.checked { background: var(--accent); border-color: var(--accent); }
+    .expense-item-body { flex: 1; min-width: 0; }
+    .expense-item-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .expense-item-place { font-weight: 600; font-size: 0.9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .expense-item-amount { font-size: 0.95rem; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+    .expense-item-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+    .expense-item-card { font-size: 0.7rem; color: var(--text-muted); background: var(--card2); padding: 2px 7px; border-radius: 99px; border: 1px solid var(--border); }
+    .expense-item-time { font-size: 0.7rem; color: var(--text-dim); }
+    .expense-item-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; font-style: italic; }
+    .settled-badge { font-size: 0.65rem; color: var(--accent); background: var(--accent-dim); padding: 2px 6px; border-radius: 99px; }
+    .del-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 2px 4px; font-size: 0.85rem; flex-shrink: 0; transition: color 0.15s; }
+    .del-btn:hover { color: var(--red); }
+
+    /* ── 날짜 그룹 헤더 ── */
+    .date-group-header {
+      font-size: 0.75rem; color: var(--text-muted); padding: 10px 2px 6px;
+      border-bottom: 1px solid var(--border); margin-bottom: 8px;
+      display: flex; justify-content: space-between;
+    }
+
+    /* ── 빈 상태 ── */
+    .empty-state { text-align: center; padding: 48px 16px; color: var(--text-dim); }
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.85rem; line-height: 1.6; }
+
+    /* ── 차트 영역 ── */
+    .chart-container { background: var(--card); border-radius: var(--radius); padding: 16px; border: 1px solid var(--border); margin-bottom: 14px; }
+    .chart-title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 14px; }
+    .pie-wrapper { display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+    svg.pie { overflow: visible; }
+    .chart-legend { display: flex; flex-direction: column; gap: 6px; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-name { flex: 1; color: var(--text-muted); }
+    .legend-pct { color: var(--text-dim); }
+    .legend-amt { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    /* ── Top5 ── */
+    .top5-item {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 6px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .top5-rank { font-size: 0.75rem; font-weight: 700; color: var(--text-dim); width: 20px; text-align: center; }
+    .top5-rank.gold   { color: #e8c84a; }
+    .top5-rank.silver { color: #b0b8b8; }
+    .top5-rank.bronze { color: #c87844; }
+    .top5-body { flex: 1; min-width: 0; }
+    .top5-place { font-size: 0.87rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .top5-meta  { font-size: 0.7rem; color: var(--text-muted); }
+    .top5-amt   { font-size: 0.92rem; font-weight: 700; color: var(--red); font-variant-numeric: tabular-nums; }
+
+    /* ── 옵션 아이템 ── */
+    .option-list { display: flex; flex-direction: column; gap: 8px; }
+    .option-item {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 14px 16px;
+      cursor: pointer; display: flex; align-items: center; gap: 12px;
+      transition: border-color 0.2s;
+    }
+    .option-item:hover { border-color: var(--accent2); }
+    .option-icon { font-size: 1.2rem; width: 28px; text-align: center; }
+    .option-info { flex: 1; }
+    .option-name { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+    .option-desc { font-size: 0.75rem; color: var(--text-muted); }
+
+    /* ── 태그 관리 (결제수단/분류 공용) ── */
+    .tag-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .manage-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 99px; padding: 4px 10px; font-size: 0.8rem;
+    }
+    .tag-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1rem; line-height: 1; }
+    .tag-remove:hover { color: var(--red); }
+    .tag-add-row { display: flex; gap: 8px; margin-top: 6px; }
+    .tag-add-row .form-input { flex: 1; }
+
+    /* ── 테마/폰트 컨트롤 섹션 ── */
+    .control-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 8px;
+    }
+    .control-label { font-size: 0.88rem; font-weight: 500; }
+    .control-sub { font-size: 0.72rem; color: var(--text-muted); }
+    .toggle-btn-group { display: flex; gap: 4px; }
+    .toggle-btn {
+      padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border);
+      background: var(--card2); color: var(--text-muted); cursor: pointer;
+      font-size: 0.8rem; font-family: inherit; font-weight: 500; transition: all 0.15s;
+    }
+    .toggle-btn.active { background: var(--accent); border-color: var(--accent); color: var(--fab-text); }
+
+    /* ── 섹션 타이틀 ── */
+    .section-title {
+      font-size: 0.72rem; font-weight: 700; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: 0.8px; margin: 20px 0 8px;
+    }
+
+    /* ── 애니메이션 ── */
+    @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* 스크롤바 */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    select option { background: var(--card); color: var(--text); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+/* ═══════════════ 유틸 ═══════════════ */
+const fmt   = (n) => '₩' + Math.abs(n).toLocaleString('ko-KR');
+const today = () => { const d = new Date(); return d.toISOString().slice(0,10); };
+const nowTime = () => { const d = new Date(); return d.toTimeString().slice(0,5); };
+const uid   = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+const CHART_COLORS = ['#4caf7d','#5ca8e0','#e8c84a','#e05c5c','#a07de8','#e08a5c','#5ce0c8','#c85ce0','#7dc44c'];
+const DAYS = ['일','월','화','수','목','금','토'];
+
+const LS = {
+  get: (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } },
+  set: (k, v)   => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const DEFAULT_CARDS = ['현금','신한카드','신한체크','카카오페이','삼성페이','하나카드','KB국민카드','케이뱅크','토스'];
+const DEFAULT_CATS  = ['식비','교통비','쇼핑','의료','문화/여가','카페','주거','구독','기타'];
+
+/* ═══════════════ 파이차트 ═══════════════ */
+function PieChart({ data }) {
+  if (!data || data.length === 0)
+    return <div style={{textAlign:'center',padding:'24px',color:'var(--text-dim)',fontSize:'0.85rem'}}>데이터 없음</div>;
+
+  const total = data.reduce((s,d) => s+d.value, 0);
+  const R = 78; const cx = 100; const cy = 100;
+  let angle = -Math.PI / 2;
+  const slices = data.map((d,i) => {
+    const pct = d.value / total;
+    const sa = angle; angle += pct * 2 * Math.PI; const ea = angle;
+    const arc = pct > 0.5 ? 1 : 0;
+    const x1 = cx + R*Math.cos(sa), y1 = cy + R*Math.sin(sa);
+    const x2 = cx + R*Math.cos(ea), y2 = cy + R*Math.sin(ea);
+    return { path:`M${cx} ${cy} L${x1} ${y1} A${R} ${R} 0 ${arc} 1 ${x2} ${y2}Z`, color:CHART_COLORS[i%CHART_COLORS.length], pct, label:d.label, value:d.value };
+  });
+
+  return (
+    <div>
+      <div className="pie-wrapper">
+        <svg className="pie" width="200" height="200" viewBox="0 0 200 200">
+          <circle cx={cx} cy={cy} r={R+5} fill="var(--card2)"/>
+          {slices.map((s,i) => <path key={i} d={s.path} fill={s.color} opacity="0.9"/>)}
+          <circle cx={cx} cy={cy} r={R-28} fill="var(--card)"/>
+          <text x={cx} y={cy-7} textAnchor="middle" fill="var(--text-muted)" fontSize="9">총 지출</text>
+          <text x={cx} y={cy+9} textAnchor="middle" fill="var(--text)" fontSize="10" fontWeight="700">{fmt(total)}</text>
+        </svg>
+      </div>
+      <div className="chart-legend">
+        {slices.map((s,i) => (
+          <div key={i} className="legend-item">
+            <div className="legend-dot" style={{background:s.color}}/>
+            <span className="legend-name">{s.label}</span>
+            <span className="legend-pct">{(s.pct*100).toFixed(1)}%</span>
+            <span className="legend-amt">{fmt(s.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════ 태그 관리 박스 (카드/분류 공용) ═══════════════ */
+function TagManager({ title, items, onAdd, onRemove, placeholder, minCount=1 }) {
+  const [val, setVal] = useState('');
+  const doAdd = () => { const v=val.trim(); if(v && !items.includes(v)){ onAdd(v); setVal(''); } };
+  return (
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:'var(--radius)',padding:'14px',marginBottom:10}}>
+      <div style={{fontSize:'0.78rem',fontWeight:600,color:'var(--text-muted)',marginBottom:8}}>{title}</div>
+      <div className="tag-wrap">
+        {items.map(c => (
+          <span key={c} className="manage-tag">
+            {c}
+            <button className="tag-remove" onClick={()=>{ if(items.length<=minCount){alert(`최소 ${minCount}개 필요해요`);return;} onRemove(c); }}>×</button>
+          </span>
+        ))}
+        {items.length === 0 && <span style={{fontSize:'0.78rem',color:'var(--text-dim)'}}>항목 없음</span>}
+      </div>
+      <div className="tag-add-row">
+        <input className="form-input" style={{flex:1}} type="text" placeholder={placeholder}
+          value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doAdd()}/>
+        <button className="btn btn-primary" style={{flex:'none',padding:'10px 14px'}} onClick={doAdd}>추가</button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════ 지출 입력 모달 ═══════════════ */
+function ExpenseModal({ onClose, onSave, editItem, cards, categories }) {
+  const [form, setForm] = useState(editItem ? {...editItem} : {
+    id: uid(), date: today(), time: nowTime(),
+    amount:'', place:'', card: cards[0]||'현금', category:'', note:'', settled:false,
+  });
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  const handleSave = () => {
+    if (!form.amount || !form.place) return alert('비용과 사용처를 입력해주세요');
+    onSave({...form, amount: parseInt(form.amount.toString().replace(/,/g,''),10)||0});
+    onClose();
+  };
+  const handleAmountChange = e => { set('amount', e.target.value.replace(/[^\d]/g,'')); };
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal">
+        <div className="modal-title">
+          ✏️ {editItem?'지출 수정':'지출 추가'}
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="form-row-inline">
+          <div className="form-row" style={{marginBottom:0}}>
+            <label className="form-label">날짜</label>
+            <input className="form-input" type="date" value={form.date} onChange={e=>set('date',e.target.value)}/>
+          </div>
+          <div className="form-row" style={{marginBottom:0}}>
+            <label className="form-label">시간</label>
+            <input className="form-input" type="time" value={form.time} onChange={e=>set('time',e.target.value)}/>
+          </div>
+        </div>
+
+        <div className="form-row" style={{marginTop:12}}>
+          <label className="form-label">💰 비용 (원)</label>
+          <input className="form-input amount" type="text" inputMode="numeric"
+            placeholder="0"
+            value={form.amount ? Number(form.amount).toLocaleString('ko-KR') : ''}
+            onChange={handleAmountChange} autoFocus={!editItem}/>
+        </div>
+
+        <div className="form-row">
+          <label className="form-label">🏪 사용처</label>
+          <input className="form-input" type="text" placeholder="예: 스타벅스, 마트, 주유소..."
+            value={form.place} onChange={e=>set('place',e.target.value)}/>
+        </div>
+
+        <div className="form-row-inline">
+          <div className="form-row" style={{marginBottom:0}}>
+            <label className="form-label">💳 결제수단</label>
+            <select className="form-select" value={form.card} onChange={e=>set('card',e.target.value)}>
+              {cards.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="form-row" style={{marginBottom:0}}>
+            <label className="form-label">🏷️ 분류</label>
+            <select className="form-select" value={form.category} onChange={e=>set('category',e.target.value)}>
+              <option value="">없음</option>
+              {categories.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="form-row" style={{marginTop:12}}>
+          <label className="form-label">📝 비고 (선택)</label>
+          <input className="form-input" type="text" placeholder="메모..."
+            value={form.note} onChange={e=>set('note',e.target.value)}/>
+        </div>
+
+        <div className="btn-row">
+          <button className="btn btn-ghost" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={handleSave}>{editItem?'수정완료':'저장'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════ 지출 탭 ═══════════════ */
+function ExpenseTab({ expenses, setExpenses, cards, categories }) {
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  });
+
+  const changeMonth = delta => {
+    const [y,m] = viewMonth.split('-').map(Number);
+    const d = new Date(y, m-1+delta, 1);
+    setViewMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  };
+
+  const monthItems = useMemo(() =>
+    expenses.filter(e=>e.date.startsWith(viewMonth)).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time)),
+  [expenses, viewMonth]);
+
+  const totalAmt     = useMemo(()=>monthItems.reduce((s,e)=>s+e.amount,0),[monthItems]);
+  const unsettledAmt = useMemo(()=>monthItems.filter(e=>!e.settled).reduce((s,e)=>s+e.amount,0),[monthItems]);
+
+  const grouped = useMemo(()=>{
+    const map={};
+    monthItems.forEach(e=>{ if(!map[e.date])map[e.date]=[]; map[e.date].push(e); });
+    return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
+  },[monthItems]);
+
+  const handleSave = item => {
+    setExpenses(prev => editItem ? prev.map(e=>e.id===item.id?item:e) : [...prev,item]);
+    setEditItem(null);
+  };
+  const handleToggleSettle = (id,e) => {
+    e.stopPropagation();
+    setExpenses(prev=>prev.map(x=>x.id===id?{...x,settled:!x.settled}:x));
+  };
+  const handleEdit   = item => { setEditItem(item); setShowModal(true); };
+  const handleDelete = id => {
+    if(window.confirm('이 항목을 삭제할까요?')) setExpenses(prev=>prev.filter(x=>x.id!==id));
+  };
+
+  const [y,m] = viewMonth.split('-');
+
+  return (
+    <>
+      <div className="month-nav">
+        <button className="month-nav-btn" onClick={()=>changeMonth(-1)}>‹</button>
+        <span className="month-label">{y}년 {parseInt(m)}월</span>
+        <button className="month-nav-btn" onClick={()=>changeMonth(1)}>›</button>
+      </div>
+
+      <div className="summary-row">
+        <div className="summary-card">
+          <div className="summary-label">이번 달 총 지출</div>
+          <div className="summary-amount red">{fmt(totalAmt)}</div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-label">미정산 잔액</div>
+          <div className="summary-amount yellow">{fmt(unsettledAmt)}</div>
+        </div>
+      </div>
+
+      {grouped.length === 0 ? (
+        <div className="empty-state">
+          <div className="icon">💸</div>
+          <p>이번 달 지출 내역이 없어요<br/>오른쪽 아래 + 버튼으로 추가해보세요!</p>
+        </div>
+      ) : grouped.map(([date,items])=>{
+        const dayTotal = items.reduce((s,e)=>s+e.amount,0);
+        const d = new Date(date);
+        const dayLabel = `${parseInt(date.slice(5,7))}/${parseInt(date.slice(8,10))} (${DAYS[d.getDay()]})`;
+        return (
+          <div key={date}>
+            <div className="date-group-header">
+              <span>{dayLabel}</span>
+              <span style={{color:'var(--red)'}}>{fmt(dayTotal)}</span>
+            </div>
+            {items.map(item=>(
+              <div key={item.id} className={`expense-item${item.settled?' settled':''}`} onClick={()=>handleEdit(item)}>
+                <button className={`expense-item-check${item.settled?' checked':''}`}
+                  onClick={e=>handleToggleSettle(item.id,e)}>
+                  {item.settled && <span style={{color:'var(--fab-text)',fontSize:'0.65rem',fontWeight:700}}>✓</span>}
+                </button>
+                <div className="expense-item-body">
+                  <div className="expense-item-top">
+                    <span className="expense-item-place">{item.place}</span>
+                    <span className="expense-item-amount">{fmt(item.amount)}</span>
+                  </div>
+                  <div className="expense-item-meta">
+                    <span className="expense-item-card">{item.card}</span>
+                    {item.category && <span className="category-badge">{item.category}</span>}
+                    <span className="expense-item-time">{item.time}</span>
+                    {item.settled && <span className="settled-badge">✓ 정산완료</span>}
+                  </div>
+                  {item.note && <div className="expense-item-note">"{item.note}"</div>}
+                </div>
+                <button className="del-btn" onClick={e=>{e.stopPropagation();handleDelete(item.id)}}>✕</button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+
+      {(showModal || editItem) && (
+        <ExpenseModal
+          cards={cards} categories={categories}
+          editItem={editItem}
+          onClose={()=>{setShowModal(false);setEditItem(null);}}
+          onSave={handleSave}
+        />
+      )}
+      <button className="fab" onClick={()=>{setEditItem(null);setShowModal(true);}}>＋</button>
+    </>
+  );
+}
+
+/* ═══════════════ 통계 탭 ═══════════════ */
+function StatsTab({ expenses }) {
+  const [viewMonth, setViewMonth] = useState(()=>{
+    const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  });
+  const [chartMode, setChartMode] = useState('card'); // 'card' | 'category'
+
+  const changeMonth = delta => {
+    const [y,m] = viewMonth.split('-').map(Number);
+    const d = new Date(y,m-1+delta,1);
+    setViewMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  };
+
+  const monthItems = useMemo(()=>expenses.filter(e=>e.date.startsWith(viewMonth)),[expenses,viewMonth]);
+
+  const chartData = useMemo(()=>{
+    const map={};
+    monthItems.forEach(e=>{
+      const key = chartMode==='card' ? e.card : (e.category||'분류없음');
+      map[key]=(map[key]||0)+e.amount;
+    });
+    return Object.entries(map).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
+  },[monthItems, chartMode]);
+
+  const top5 = useMemo(()=>[...monthItems].sort((a,b)=>b.amount-a.amount).slice(0,5),[monthItems]);
+  const [y,m] = viewMonth.split('-');
+
+  return (
+    <>
+      <div className="month-nav">
+        <button className="month-nav-btn" onClick={()=>changeMonth(-1)}>‹</button>
+        <span className="month-label">{y}년 {parseInt(m)}월 통계</span>
+        <button className="month-nav-btn" onClick={()=>changeMonth(1)}>›</button>
+      </div>
+
+      <div className="chart-container">
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+          <div className="chart-title" style={{marginBottom:0}}>지출 비중</div>
+          <div className="toggle-btn-group">
+            <button className={`toggle-btn${chartMode==='card'?' active':''}`} onClick={()=>setChartMode('card')}>결제수단</button>
+            <button className={`toggle-btn${chartMode==='category'?' active':''}`} onClick={()=>setChartMode('category')}>분류</button>
+          </div>
+        </div>
+        <PieChart data={chartData}/>
+      </div>
+
+      <div className="section-title">🏆 지출 Top 5</div>
+      {top5.length===0 ? (
+        <div className="empty-state"><div className="icon">📊</div><p>데이터가 없어요</p></div>
+      ) : top5.map((item,i)=>(
+        <div key={item.id} className="top5-item">
+          <div className={`top5-rank${i===0?' gold':i===1?' silver':i===2?' bronze':''}`}>{i+1}</div>
+          <div className="top5-body">
+            <div className="top5-place">{item.place}</div>
+            <div className="top5-meta">
+              {item.date} · {item.card}{item.category ? ` · ${item.category}` : ''}
+            </div>
+          </div>
+          <div className="top5-amt">{fmt(item.amount)}</div>
+        </div>
+      ))}
+
+      {monthItems.length>0 && (
+        <>
+          <div className="section-title">📅 이번 달 요약</div>
+          <div className="summary-row">
+            <div className="summary-card">
+              <div className="summary-label">총 지출 건수</div>
+              <div className="summary-amount green">{monthItems.length}건</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">건당 평균</div>
+              <div className="summary-amount">{fmt(Math.round(monthItems.reduce((s,e)=>s+e.amount,0)/monthItems.length))}</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">정산 완료</div>
+              <div className="summary-amount green">{monthItems.filter(e=>e.settled).length}건</div>
+            </div>
+            <div className="summary-card">
+              <div className="summary-label">정산 미완료</div>
+              <div className="summary-amount yellow">{monthItems.filter(e=>!e.settled).length}건</div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/* ═══════════════ 설정 탭 ═══════════════ */
+function SettingsTab({ cards, setCards, categories, setCategories, allData, setAllData, theme, setTheme, fontSize, setFontSize }) {
+
+  const exportJSON = () => {
+    const blob = new Blob([JSON.stringify({expenses:allData, cards, categories},null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`가계부_백업_${today()}.json`; a.click();
+  };
+
+  const importJSON = () => {
+    const input=document.createElement('input'); input.type='file'; input.accept='.json';
+    input.onchange=e=>{
+      const file=e.target.files[0]; if(!file)return;
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        try {
+          const data=JSON.parse(ev.target.result);
+          if(data.expenses)  setAllData(data.expenses);
+          if(data.cards)     setCards(data.cards);
+          if(data.categories)setCategories(data.categories);
+          alert('✅ 복원 완료!');
+        } catch { alert('❌ 파일 형식이 올바르지 않아요'); }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  const exportExcel = () => {
+    if(allData.length===0)return alert('데이터가 없어요');
+    const ws=XLSX.utils.json_to_sheet(allData.map(e=>({
+      날짜:e.date, 시간:e.time, 사용처:e.place,
+      금액:e.amount, 결제수단:e.card, 분류:e.category||'',
+      비고:e.note||'', 정산완료:e.settled?'Y':'N',
+    })));
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'지출내역');
+    XLSX.writeFile(wb,`가계부_${today()}.xlsx`);
+  };
+
+  const fontSizes = [
+    {label:'작게', value:14},
+    {label:'기본', value:16},
+    {label:'크게', value:18},
+    {label:'더크게', value:20},
+  ];
+
+  return (
+    <>
+      {/* 화면 설정 */}
+      <div className="section-title" style={{marginTop:0}}>🎨 화면 설정</div>
+
+      <div className="control-row">
+        <div>
+          <div className="control-label">테마</div>
+          <div className="control-sub">다크 / 라이트</div>
+        </div>
+        <div className="toggle-btn-group">
+          <button className={`toggle-btn${theme==='dark'?' active':''}`}  onClick={()=>setTheme('dark')}>🌙 다크</button>
+          <button className={`toggle-btn${theme==='light'?' active':''}`} onClick={()=>setTheme('light')}>☀️ 라이트</button>
+        </div>
+      </div>
+
+      <div className="control-row">
+        <div>
+          <div className="control-label">글자 크기</div>
+          <div className="control-sub">현재 {fontSize}px</div>
+        </div>
+        <div className="toggle-btn-group">
+          {fontSizes.map(f=>(
+            <button key={f.value} className={`toggle-btn${fontSize===f.value?' active':''}`} onClick={()=>setFontSize(f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 결제수단 */}
+      <div className="section-title">💳 결제수단 관리</div>
+      <TagManager
+        title="등록된 결제수단"
+        items={cards}
+        onAdd={v=>setCards(prev=>[...prev,v])}
+        onRemove={v=>setCards(prev=>prev.filter(x=>x!==v))}
+        placeholder="새 결제수단 입력"
+        minCount={1}
+      />
+
+      {/* 분류 */}
+      <div className="section-title">🏷️ 분류 관리</div>
+      <div style={{fontSize:'0.75rem',color:'var(--text-muted)',marginBottom:8,lineHeight:1.5}}>
+        💡 분류를 삭제해도 기존에 입력된 데이터는 유지돼요.<br/>
+        삭제된 분류는 지출 목록에서 그대로 표시됩니다.
+      </div>
+      <TagManager
+        title="등록된 분류"
+        items={categories}
+        onAdd={v=>setCategories(prev=>[...prev,v])}
+        onRemove={v=>setCategories(prev=>prev.filter(x=>x!==v))}
+        placeholder="새 분류 입력 (예: 의료, 여행...)"
+        minCount={0}
+      />
+
+      {/* 데이터 관리 */}
+      <div className="section-title">📦 데이터 관리</div>
+      <div className="option-list">
+        {[
+          {icon:'💾', name:'JSON 백업',      desc:'모든 데이터를 JSON 파일로 저장',      fn:exportJSON},
+          {icon:'📂', name:'JSON 복원',      desc:'백업 파일에서 데이터 불러오기',       fn:importJSON},
+          {icon:'📊', name:'엑셀 내보내기',  desc:'분류 포함 스프레드시트 .xlsx 생성',  fn:exportExcel},
+        ].map(o=>(
+          <div key={o.name} className="option-item" onClick={o.fn}>
+            <span className="option-icon">{o.icon}</span>
+            <div className="option-info">
+              <div className="option-name">{o.name}</div>
+              <div className="option-desc">{o.desc}</div>
+            </div>
+            <span style={{color:'var(--text-dim)'}}>›</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{marginTop:12}}>
+        <button className="btn btn-danger" style={{width:'100%'}} onClick={()=>{
+          if(window.confirm('⚠️ 모든 지출 데이터를 삭제할까요?\n결제수단·분류 설정은 유지됩니다.'))
+            setAllData([]);
+        }}>🗑️ 지출 데이터 전체 삭제</button>
+      </div>
+
+      <div style={{marginTop:20,padding:'14px',background:'var(--card)',borderRadius:'var(--radius)',border:'1px solid var(--border)'}}>
+        <div style={{fontSize:'0.73rem',color:'var(--text-muted)',lineHeight:1.9}}>
+          <div>📱 내 가계부 v1.1</div>
+          <div>🔒 데이터는 기기 로컬에만 저장돼요</div>
+          <div>⭕ 정산완료 = 생활비 돌려받은 항목 체크</div>
+          <div>🏷️ 삭제된 분류는 기존 데이터에 그대로 남아요</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════ 메인 앱 ═══════════════ */
+function App() {
+  const [tab,        setTab]        = useState('expense');
+  const [expenses,   setExpenses]   = useState(()=>LS.get('expenses',[]));
+  const [cards,      setCards]      = useState(()=>LS.get('cards', DEFAULT_CARDS));
+  const [categories, setCategories] = useState(()=>LS.get('categories', DEFAULT_CATS));
+  const [theme,      setTheme]      = useState(()=>LS.get('theme','dark'));
+  const [fontSize,   setFontSize]   = useState(()=>LS.get('fontSize',16));
+
+  /* 저장 */
+  useEffect(()=>LS.set('expenses',   expenses),   [expenses]);
+  useEffect(()=>LS.set('cards',      cards),      [cards]);
+  useEffect(()=>LS.set('categories', categories), [categories]);
+  useEffect(()=>LS.set('theme',      theme),      [theme]);
+  useEffect(()=>LS.set('fontSize',   fontSize),   [fontSize]);
+
+  /* 테마 / 폰트 사이즈 반영 */
+  useEffect(()=>{ document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+  useEffect(()=>{ document.documentElement.style.fontSize = fontSize + 'px'; }, [fontSize]);
+
+  const TABS = [
+    {id:'expense',  label:'💸 지출'},
+    {id:'stats',    label:'📊 통계'},
+    {id:'settings', label:'⚙️ 설정'},
+  ];
+
+  return (
+    <div id="app">
+      <header className="app-header">
+        <div className="app-title">📒 내 가계부</div>
+        <div className="header-actions">
+          {/* 폰트 크기 퀵버튼 */}
+          <button className="font-btn" style={{fontSize:'0.72rem'}}
+            onClick={()=>setFontSize(f=>Math.max(13,f-1))}>A-</button>
+          <span className="font-size-label">{fontSize}</span>
+          <button className="font-btn" style={{fontSize:'0.88rem'}}
+            onClick={()=>setFontSize(f=>Math.min(22,f+1))}>A+</button>
+          {/* 테마 토글 */}
+          <button className="header-btn" title="테마 전환"
+            onClick={()=>setTheme(t=>t==='dark'?'light':'dark')}>
+            {theme==='dark'?'☀️':'🌙'}
+          </button>
+        </div>
+      </header>
+
+      <nav className="tabs">
+        {TABS.map(t=>(
+          <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={()=>setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      <main className="content">
+        {tab==='expense'  && <ExpenseTab  expenses={expenses} setExpenses={setExpenses} cards={cards} categories={categories}/>}
+        {tab==='stats'    && <StatsTab    expenses={expenses}/>}
+        {tab==='settings' && <SettingsTab
+          cards={cards}        setCards={setCards}
+          categories={categories} setCategories={setCategories}
+          allData={expenses}   setAllData={setExpenses}
+          theme={theme}        setTheme={setTheme}
+          fontSize={fontSize}  setFontSize={setFontSize}
+        />}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
